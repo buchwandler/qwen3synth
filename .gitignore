@@ -218,3 +218,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+qwen3synth/_version.py
+context_qwen3synth*.*
