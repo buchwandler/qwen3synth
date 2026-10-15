@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import unicodedata
-from functools import lru_cache
 from pathlib import Path
 
 
@@ -19,7 +18,7 @@ def _bytes_to_unicode() -> dict[int, str]:
             bs.append(b)
             cs.append(256 + n)
             n += 1
-    return dict(zip(bs, (chr(c) for c in cs)))
+    return dict(zip(bs, (chr(c) for c in cs), strict=True))
 
 
 def _is_letter(c: str) -> bool:
@@ -147,18 +146,22 @@ class ByteLevelBPETokenizer:
                     if isinstance(value, dict) and "content" in value:
                         self.special[str(value["content"])] = int(key)
         self._special_sorted = sorted(self.special, key=len, reverse=True)
+        self._bpe_cache: dict[str, tuple[str, ...]] = {}
 
     @staticmethod
     def _pairs(word: tuple[str, ...]) -> set[tuple[str, str]]:
-        return set(zip(word, word[1:]))
+        return set(zip(word, word[1:], strict=False))
 
-    @lru_cache(maxsize=100_000)
     def _bpe(self, token: str) -> tuple[str, ...]:
+        if token in self._bpe_cache:
+            return self._bpe_cache[token]
         if not token:
             return ()
         word = tuple(token)
         pairs = self._pairs(word)
         if not pairs:
+            if len(self._bpe_cache) < 100_000:
+                self._bpe_cache[token] = word
             return word
         while True:
             bigram = min(pairs, key=lambda p: self.bpe_ranks.get(p, 10**18))
@@ -185,6 +188,8 @@ class ByteLevelBPETokenizer:
             if len(word) == 1:
                 break
             pairs = self._pairs(word)
+        if len(self._bpe_cache) < 100_000:
+            self._bpe_cache[token] = word
         return word
 
     def _ordinary(self, text: str) -> list[int]:

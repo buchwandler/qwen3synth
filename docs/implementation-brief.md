@@ -5,6 +5,8 @@
 **Repository / distribution / import / CLI:** `qwen3synth` / `qwen3synth` / `qwen3synth` / `qwen3synth`
 **Companion repository:** [`qwen3-onnx-bundles`](./qwen3-onnx-bundles-implementation-brief.md)
 
+> **Implementation status:** This brief records the original proposal and feasibility decisions; its proposed API and component ownership are not the current contract. The implementation delegates catalog, assets, sessions, generation, and vocoding to OnnxVoice while Qwen3Synth retains frontend and profile behavior. See the current [Qwen3Synth README](../README.md) and [OnnxVoice Qwen3 runtime documentation](https://github.com/buchwandler/onnxvoice/blob/main/docs/systems/qwen3.md) for implemented APIs and verification limits.
+
 ## 0. Decision and feasibility
 
 **Proceed, in incremental, independently testable phases.** This is technically possible with downloadable, pre-exported ONNX assets and independently written Python code. A model download is **not** sufficient by itself: autoregressive generation, model-specific embedding assembly, logit sampling, text tokenization, reference-audio processing, KV-cache transfer, codebook prediction, vocoder calls, and waveform trimming require implementation.

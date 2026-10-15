@@ -34,6 +34,9 @@ class PreparedVoice:
     layout: str = "qwen3-wavekat-v1"
     source_id: str | None = None
 
+    reference_samples: int = 0
+    reference_token_ids: tuple[int, ...] = ()
+
     def save(self, path: str | Path) -> None:
         speaker = _npy_bytes(np.asarray(self.speaker_embedding, dtype=np.float32))
         codes = _npy_bytes(np.asarray(self.reference_codes, dtype=np.int64))
@@ -47,6 +50,8 @@ class PreparedVoice:
             "model_id": self.model_id,
             "model_revision": self.model_revision,
             "source_id": self.source_id,
+            "reference_samples": self.reference_samples,
+            "reference_token_ids": list(self.reference_token_ids),
             "files": {
                 "speaker_embedding.npy": hashlib.sha256(speaker).hexdigest(),
                 "reference_codes.npy": hashlib.sha256(codes).hexdigest(),
@@ -91,4 +96,8 @@ class PreparedVoice:
             model_revision=manifest.get("model_revision"),
             layout=str(manifest.get("layout", "qwen3-wavekat-v1")),
             source_id=manifest.get("source_id"),
+            reference_samples=int(manifest.get("reference_samples", 0)),
+            reference_token_ids=tuple(
+                int(token_id) for token_id in manifest.get("reference_token_ids", ())
+            ),
         )

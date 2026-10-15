@@ -1,4 +1,5 @@
 import numpy as np
+
 from qwen3synth.profile import PreparedVoice
 
 

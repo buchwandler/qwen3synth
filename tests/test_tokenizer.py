@@ -1,4 +1,5 @@
 import json
+
 from qwen3synth.tokenizer import ByteLevelBPETokenizer, _bytes_to_unicode
 
 
