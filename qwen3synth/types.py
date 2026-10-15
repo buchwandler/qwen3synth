@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 
 from .audio import write_wav
+from .errors import InvalidReferenceTranscriptError
 
 
 @dataclass(frozen=True)
@@ -66,8 +67,8 @@ class ReferenceVoice:
     source_id: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.transcript.strip():
-            raise ValueError("reference transcript must not be empty")
+        if not isinstance(self.transcript, str) or not self.transcript.strip():
+            raise InvalidReferenceTranscriptError("reference transcript must not be empty")
 
 
 @dataclass(frozen=True)

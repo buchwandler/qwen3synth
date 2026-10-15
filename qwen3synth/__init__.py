@@ -5,6 +5,8 @@ try:
 except ImportError:  # source tree before setuptools_scm generated _version.py
     __version__ = "0.0.0"
 
+from .api_contract import REQUEST_API_VERSION, RequestApiContract, request_api_contract
+from .discovery import DiscoveredBundle, discover_bundles
 from .errors import (
     CatalogError,
     IncompatibleVoiceProfileError,
@@ -17,7 +19,8 @@ from .errors import (
     SynthesisInputTooLongError,
     UnsupportedModelCapabilityError,
 )
-from .profile import PreparedVoice
+from .identity import runtime_identity
+from .profile import PreparedVoice, VoiceProfileInfo, inspect_voice_profile
 from .runtime import Qwen3Runtime
 from .types import (
     GenerationConfig,
@@ -30,10 +33,18 @@ from .types import (
 
 __all__ = [
     "__version__",
+    "REQUEST_API_VERSION",
+    "RequestApiContract",
+    "request_api_contract",
+    "runtime_identity",
+    "DiscoveredBundle",
+    "discover_bundles",
     "Qwen3Runtime",
     "GenerationConfig",
     "ReferenceVoice",
     "PreparedVoice",
+    "VoiceProfileInfo",
+    "inspect_voice_profile",
     "RequestMeasure",
     "SynthesisRequest",
     "SynthesisResult",

@@ -30,85 +30,80 @@ def _is_number(c: str) -> bool:
 
 
 def _pretokenize(text: str) -> list[str]:
-    # Pure-Python approximation of the Qwen/GPT byte-level pre-tokenizer.
-    # It intentionally preserves leading spaces with the following token.
-    out: list[str] = []
-    i = 0
+    """Split text with the Qwen tokenizer's GPT-style Unicode regex."""
     contractions = ("'s", "'t", "'re", "'ve", "'m", "'ll", "'d")
-    while i < len(text):
-        lower = text[i:].lower()
-        matched = next((c for c in contractions if lower.startswith(c)), None)
-        if matched:
-            out.append(text[i : i + len(matched)])
-            i += len(matched)
-            continue
-        c = text[i]
-        if c in "\r\n":
-            j = i + 1
-            while j < len(text) and text[j] in "\r\n":
-                j += 1
-            out.append(text[i:j])
-            i = j
-            continue
-        if c.isspace():
-            j = i
-            while j < len(text) and text[j].isspace() and text[j] not in "\r\n":
-                j += 1
-            if j < len(text) and (_is_letter(text[j]) or not text[j].isspace()):
-                prefix = text[i:j]
-                if _is_letter(text[j]):
-                    k = j + 1
-                    while k < len(text) and _is_letter(text[k]):
-                        k += 1
-                    out.append(prefix + text[j:k])
-                    i = k
-                    continue
-                if _is_number(text[j]):
-                    k = j
-                    while k < len(text) and _is_number(text[k]) and k - j < 3:
-                        k += 1
-                    out.append(prefix + text[j:k])
-                    i = k
-                    continue
-                k = j + 1
-                while (
-                    k < len(text)
-                    and not text[k].isspace()
-                    and not _is_letter(text[k])
-                    and not _is_number(text[k])
-                ):
-                    k += 1
-                out.append(prefix + text[j:k])
-                i = k
-                continue
-            out.append(text[i:j])
-            i = j
-            continue
-        if _is_letter(c):
-            j = i + 1
-            while j < len(text) and _is_letter(text[j]):
-                j += 1
-            out.append(text[i:j])
-            i = j
-            continue
-        if _is_number(c):
-            j = i
-            while j < len(text) and _is_number(text[j]) and j - i < 3:
-                j += 1
-            out.append(text[i:j])
-            i = j
-            continue
-        j = i + 1
-        while (
-            j < len(text)
-            and not text[j].isspace()
-            and not _is_letter(text[j])
-            and not _is_number(text[j])
+
+    def match_at(start: int) -> int | None:
+        for contraction in contractions:
+            end = start + len(contraction)
+            if text[start:end].lower() == contraction:
+                return end
+
+        end = start
+        if (
+            text[start] not in "\r\n"
+            and not _is_letter(text[start])
+            and not _is_number(text[start])
         ):
-            j += 1
-        out.append(text[i:j])
-        i = j
-    return out
+            end += 1
+        if end < len(text) and _is_letter(text[end]):
+            end += 1
+            while end < len(text) and _is_letter(text[end]):
+                end += 1
+            return end
+
+        if _is_number(text[start]):
+            return start + 1
+
+        end = start + (text[start] == " ")
+        if (
+            end < len(text)
+            and not text[end].isspace()
+            and not _is_letter(text[end])
+            and not _is_number(text[end])
+        ):
+            end += 1
+            while (
+                end < len(text)
+                and not text[end].isspace()
+                and not _is_letter(text[end])
+                and not _is_number(text[end])
+            ):
+                end += 1
+            while end < len(text) and text[end] in "\r\n":
+                end += 1
+            return end
+
+        end = start
+        while end < len(text) and text[end].isspace():
+            end += 1
+        last_newline = max(text.rfind("\r", start, end), text.rfind("\n", start, end))
+        if last_newline >= start:
+            return last_newline + 1
+        if end > start:
+            if end == len(text):
+                return end
+            if end - start > 1:
+                return end - 1
+            return end
+        return None
+
+    pieces: list[str] = []
+    cursor = 0
+    position = 0
+    while position < len(text):
+        end = match_at(position)
+        if end is None:
+            position += 1
+            continue
+        if cursor < position:
+            pieces.append(text[cursor:position])
+        pieces.append(text[position:end])
+        position = end
+        cursor = end
+    if cursor < len(text):
+        pieces.append(text[cursor:])
+    return pieces
 
 
 class ByteLevelBPETokenizer:

@@ -1,0 +1,18 @@
+schema_version = 3
+
+[project]
+uuid = "34d617c2-1e23-41b7-a3b7-00fce53b8db5"
+name = "Qwen3Synth"
+
+[ledgers.taskledger.mounts.data]
+storage = "external"
+root = "../ledger"
+
+[ledgers.taskledger.mounts.runtime]
+storage = "user-data"
+
+[ledgers.taskledger.mounts.logs]
+storage = "user-data"
+
+[ledgers.taskledger.mounts.indexes]
+storage = "cache"

@@ -20,7 +20,7 @@ The package does not depend on `qwen-tts`, PyTorch, Transformers, `huggingface_h
 
 ## Explicit model installation
 
-Synthesis does not install weights implicitly. Install a model first with Qwen3Synth's compatibility CLI (delegated to OnnxVoice), or use the OnnxVoice API directly:
+Only `qwen3synth models install` and Python `Qwen3Runtime.from_pretrained()` acquire model assets. CLI design, prepare, and synthesis commands only open installed models. For offline or production use, prefer `Qwen3Runtime.from_installed()`.
 
 ```bash
 qwen3synth models list
@@ -54,7 +54,7 @@ qwen3synth voice prepare \
   --language en --output narrator.qvoice
 ```
 
-The `.qvoice` profile is a versioned ZIP containing JSON metadata, numeric conditioning arrays, reference sample count, transcript token IDs, and checksums. It does not use pickle. A profile is checked against the selected model identity and `qwen3-wavekat-v1` layout before inference.
+The `.qvoice` profile uses strict schema 2: JSON metadata, numeric conditioning arrays, reference sample count, exact transcript token IDs, and checksums. It includes a profile content digest for identity. Loading enforces archive/member size limits, array shape/type checks, checksums, and `qwen3-wavekat-v1` layout. Synthesis rejects model ID or recorded model revision mismatches.
 
 ## Synthesize with the prepared profile
 
@@ -70,7 +70,7 @@ For a previously installed local directory, use `--bundle-dir PATH` instead of `
 
 ## Python API
 
-`Qwen3Runtime.from_pretrained()` explicitly resolves/installs the requested bundle into the OnnxVoice cache. `Qwen3Runtime.load()` opens an existing local bundle directory without catalog acquisition.
+`Qwen3Runtime.from_pretrained()` is an explicit convenience factory that may install the requested bundle into the OnnxVoice cache. `Qwen3Runtime.from_installed()` resolves and opens an existing installation without acquisition. `Qwen3Runtime.load()` opens an explicit local bundle directory without catalog access.
 
 ```python
 from qwen3synth import (
@@ -116,8 +116,18 @@ with Qwen3Runtime.from_pretrained(
 
 `GenerationConfig` exposes temperature, top-k, repetition penalty, maximum new codec frames, and seed. `Qwen3Runtime.measure_request()` and `measure_text()` report token capacity using the same frontend tokenizer as synthesis.
 
+## Metadata and stable API
+
+The package root exports `REQUEST_API_VERSION == 1`, `RequestApiContract`, and `request_api_contract()` for request capability negotiation. `runtime_identity()` returns deterministic frontend/ONNXVoice version and layout metadata without opening models.
+
+`discover_bundles()` delegates normalized catalog parsing to ONNXVoice and reports both Qwen3 bundles, their `base` or `voice_design` model type, `fp32`/`int4` profiles, pinned source revision, and 24-kHz sample rate. Use `offline=True` to prohibit network access. `inspect_voice_profile(path)` returns schema and model metadata plus the SHA-256 digest of the complete `.qvoice` file.
+
+The public error boundary includes `ModelNotInstalledError`, `UnsupportedModelCapabilityError`, `InvalidReferenceAudioError`, `InvalidReferenceTranscriptError`, `IncompatibleVoiceProfileError`, `InvalidModelLayoutError`, and `ModelGenerationError`. See [the API contract](docs/api-contract.md) for behavior and error mapping details.
+
+A short installed-model example is available in [`examples/README.md`](examples/README.md).
+
 ## Runtime and parity status
 
-Ordinary tests are offline and use synthetic graph/session fixtures plus committed tokenizer/audio-reference data. The OnnxVoice repository contains CPU integration cases marked `integration` and `resource_heavy` for VoiceDesign/Base at both qualities. They require matching model installations already present in an offline cache and may consume substantial disk, RAM, and CPU time; absent bundles cause explicit skips. Pytest's default discovery does not exclude integration markers, so use `pytest -m 'not integration'` for an offline-only suite. A skip is not a pass. This checkout has no installed WaveKat bundle, so real-model inference, waveform parity, and listening quality have not been verified here.
+Qwen3Synth's regular unit tests are designed to run offline and cover exact tokenizer parity, prompt templates, WAV handling, runtime behavior, profile validation, metadata APIs, and stable error mapping. Strict real-model integration completed on CPU with ONNX Runtime 1.31.0 (`CPUExecutionProvider`) and the pinned Base (`177cd39e2ddab0d4d7ce5152a7abc2d382621158`) and VoiceDesign (`62c7863a68800d72bcee4f2931148c441571ace7`) bundles at both `int4` and `fp32`: `QWEN3SYNTH_REQUIRE_REAL=1 pytest tests/test_integration_wavekat.py` completed with 4 passed in 1218.36s using an installed cache selected by `QWEN3SYNTH_TEST_CACHE`. This verified generated audio structure, Base profile prepare/save/load/clone, and offline repeat. It does not establish perceived audio quality. Manual listening remains unverified, and a skipped model test is not a pass.
 
 ONNX Runtime provider support is platform-dependent. The presence of a `cpu` or `gpu` extra does not establish that a provider wheel is available or supported on a given mobile/Termux environment. Check the [OnnxVoice provider guide](https://github.com/buchwandler/onnxvoice/blob/main/docs/providers.md) and model asset requirements before installing multi-gigabyte profiles.

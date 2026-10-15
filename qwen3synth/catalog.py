@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from onnxvoice import NotInstalledError, OnnxVoice
+from onnxvoice.errors import CatalogError as OnnxCatalogError
+from onnxvoice.errors import OfflineError
 
 from .errors import CatalogError, ModelNotInstalledError
 
@@ -32,7 +34,10 @@ def load_catalog(
 ) -> dict[str, Any]:
     """Load the normalized Qwen3 catalog through OnnxVoice."""
     manager = _manager(source, cache_dir)
-    return manager.catalog.load_raw("qwen3", refresh=source is not None)
+    try:
+        return manager.catalog.load_raw("qwen3", refresh=source is not None)
+    except (OnnxCatalogError, OfflineError) as exc:
+        raise CatalogError(str(exc)) from exc
 
 
 def bundle_record(bundle_id: str, catalog: dict[str, Any]) -> BundleRecord:

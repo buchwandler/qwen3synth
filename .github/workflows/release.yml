@@ -1,0 +1,107 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  verify-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Verify tag version
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import qwen3synth
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          expected = tag.removeprefix("v")
+          if not tag.startswith("v") or qwen3synth.__version__ != expected:
+              raise SystemExit(
+                  f"release tag {tag!r} does not match qwen3synth {qwen3synth.__version__!r}"
+              )
+          PY
+      - name: Fetch pinned tokenizer fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/qwen3-tokenizer"
+          mkdir -p "$dir"
+          base="https://huggingface.co/wavekat/Qwen3-TTS-1.7B-VoiceDesign-ONNX/resolve/62c7863a68800d72bcee4f2931148c441571ace7/tokenizer"
+          for file in tokenizer.json vocab.json merges.txt tokenizer_config.json special_tokens_map.json added_tokens.json; do
+            curl -fsSL "$base/$file?download=true" -o "$dir/$file"
+          done
+          cat <<'EOF' > "$dir/SHA256SUMS"
+          09267689b8362020b9763b65dd5be7e086b31e28d72e02837a9e781de9a91bc7  tokenizer.json
+          ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910  vocab.json
+          8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5  merges.txt
+          678d3d97f7dc7c0c60f0212799349e980fdda686c73226781e1a9eda275360ae  tokenizer_config.json
+          7b376c510ccf9d88bb9bbee41dfc5052122e16e0dec1124a8d8983c59259a9f3  special_tokens_map.json
+          d7f75a97314f5a2c70018efccde8a1712364d1ee84d22623ca6390b8564b37c6  added_tokens.json
+          EOF
+          (cd "$dir" && sha256sum --check SHA256SUMS)
+          echo "QWEN3SYNTH_TEST_TOKENIZER_DIR=$dir" >> "$GITHUB_ENV"
+          echo "QWEN3SYNTH_REQUIRE_TOKENIZER_PARITY=1" >> "$GITHUB_ENV"
+      - run: pytest -m "not integration"
+      - run: ruff check .
+      - run: ruff format --check qwen3synth tests examples
+      - run: mypy qwen3synth
+      - run: python -m compileall -q qwen3synth
+      - run: python -m build
+      - run: twine check dist/*
+      - name: Clean wheel install and public API smoke
+        shell: bash
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          venv="$RUNNER_TEMP/qwen3synth-wheel-venv"
+          python -m venv "$venv"
+          "$venv/bin/python" -m pip install --upgrade pip
+          "$venv/bin/python" -m pip install "$GITHUB_WORKSPACE"/dist/*.whl
+          cd "$RUNNER_TEMP"
+          QWEN3SYNTH_EXPECTED_VERSION="${GITHUB_REF_NAME#v}" "$venv/bin/python" - <<'PY'
+          import os
+
+          import qwen3synth
+
+          assert qwen3synth.__version__ == os.environ["QWEN3SYNTH_EXPECTED_VERSION"]
+          assert qwen3synth.REQUEST_API_VERSION == 1
+          print(qwen3synth.request_api_contract())
+          print(qwen3synth.runtime_identity())
+          PY
+          "$venv/bin/python" -m qwen3synth --help
+          "$venv/bin/qwen3synth" --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: verify-build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/qwen3synth
+    permissions:
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

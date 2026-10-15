@@ -1,24 +1,47 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
+import onnxvoice
 import pytest
-from onnxvoice import Qwen3VoiceState
+from onnxvoice import NotInstalledError, OnnxVoice, Qwen3VoiceState
+from onnxvoice.errors import CapabilityError, RuntimeContractError
 from onnxvoice.types import InferenceResult
 
 import qwen3synth.runtime as runtime_module
 from qwen3synth.audio import write_wav
+from qwen3synth.errors import (
+    IncompatibleVoiceProfileError,
+    InvalidModelLayoutError,
+    InvalidReferenceAudioError,
+    InvalidReferenceTranscriptError,
+    ModelGenerationError,
+    ModelNotInstalledError,
+    SynthesisInputTooLongError,
+    UnsupportedModelCapabilityError,
+)
 from qwen3synth.profile import PreparedVoice
 from qwen3synth.runtime import Qwen3Runtime
 from qwen3synth.types import (
     GenerationConfig,
     ReferenceVoice,
+    RequestMeasure,
     SynthesisRequest,
     VoiceDesignRequest,
 )
+
+
+def test_onnxvoice_minimum_qwen_runtime_release() -> None:
+    major, minor, patch = map(int, onnxvoice.__version__.split(".")[:3])
+    assert (major, minor, patch) >= (0, 2, 8)
+    assert callable(OnnxVoice.install)
+    assert callable(OnnxVoice.resolve)
+    assert callable(OnnxVoice.open)
+    assert Qwen3VoiceState.__module__.startswith("onnxvoice.")
 
 
 class _Tokenizer:
@@ -88,8 +111,13 @@ class _Manager:
         self.kwargs = kwargs
         self.installs: list[tuple[str, dict[str, Any]]] = []
         self.opens: list[tuple[Any, dict[str, Any]]] = []
+        self.resolves: list[tuple[str, dict[str, Any]]] = []
         self.adapter = _Adapter(Path("/fixture"))
         _Manager.instance = self
+
+    def resolve(self, ref: str, **kwargs: Any) -> Any:
+        self.resolves.append((ref, kwargs))
+        return SimpleNamespace(ref=ref, quality=kwargs["quality"])
 
     def install(self, ref: str, **kwargs: Any) -> Any:
         self.installs.append((ref, kwargs))
@@ -124,12 +152,42 @@ def test_from_pretrained_delegates_install_and_open_to_onnxvoice(
     assert manager.kwargs == {
         "cache_dir": tmp_path / "cache",
         "catalog_sources": {"qwen3": str(tmp_path / "catalog.json")},
+        "offline": False,
     }
     assert manager.installs == [("qwen3:base-0.6b", {"quality": "fp32"})]
     assert manager.opens == [(SimpleNamespace(ref="qwen3:base-0.6b"), {"providers": "cuda"})]
     assert runtime.adapter is manager.adapter
     runtime.close()
     assert manager.adapter.closed
+
+
+def test_from_installed_resolves_and_opens_offline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(runtime_module, "OnnxVoice", _Manager)
+
+    runtime = Qwen3Runtime.from_installed(
+        "base-0.6b",
+        quality="fp32",
+        provider="cuda",
+        catalog=tmp_path / "catalog.json",
+        cache_dir=tmp_path / "cache",
+    )
+
+    manager = _Manager.instance
+    assert manager is not None
+    assert manager.kwargs == {
+        "cache_dir": tmp_path / "cache",
+        "catalog_sources": {"qwen3": str(tmp_path / "catalog.json")},
+        "offline": True,
+    }
+    assert manager.resolves == [("qwen3:base-0.6b", {"quality": "fp32"})]
+    assert manager.opens == [
+        (SimpleNamespace(ref="qwen3:base-0.6b", quality="fp32"), {"providers": "cuda"})
+    ]
+    assert manager.installs == []
+    assert runtime.adapter is manager.adapter
+    runtime.close()
 
 
 def test_voice_design_uses_frontend_chat_tokens_and_generation_policy(
@@ -219,6 +277,14 @@ def test_prepare_profile_and_clone_route_reference_state_through_onnxvoice(
     }
     assert result.metadata["kind"] == "voice_clone"
 
+    with pytest.raises(IncompatibleVoiceProfileError, match="model revision"):
+        runtime.synthesize(
+            SynthesisRequest("clone-revision", "A new sentence.", "en"),
+            voice=replace(loaded, model_revision="b" * 40),
+            config=generation,
+        )
+    assert len(manager.adapter.infer_calls) == 1
+
 
 def test_local_load_maps_bundle_files_to_onnxvoice_open_local(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -242,3 +308,92 @@ def test_local_load_maps_bundle_files_to_onnxvoice_open_local(
     assert calls[0]["files"]["model:talker_prefill"] == tmp_path / "fp32" / "talker_prefill.onnx"
     assert calls[0]["providers"] == "cpu"
     assert runtime.adapter is adapter
+
+
+def test_from_installed_maps_missing_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MissingManager(_Manager):
+        def resolve(self, ref: str, **kwargs: Any) -> Any:
+            raise NotInstalledError("not installed")
+
+    monkeypatch.setattr(runtime_module, "OnnxVoice", MissingManager)
+    with pytest.raises(ModelNotInstalledError) as error:
+        Qwen3Runtime.from_installed("base-0.6b")
+    assert isinstance(error.value.__cause__, NotInstalledError)
+
+
+@pytest.mark.parametrize(
+    ("upstream_error", "public_error"),
+    [
+        (CapabilityError, UnsupportedModelCapabilityError),
+        (RuntimeContractError, InvalidModelLayoutError),
+    ],
+)
+def test_from_installed_maps_open_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    upstream_error: type[Exception],
+    public_error: type[Exception],
+) -> None:
+    class FailingManager(_Manager):
+        def open(self, installation: Any, **kwargs: Any) -> _Adapter:
+            raise upstream_error("invalid installed model")
+
+    monkeypatch.setattr(runtime_module, "OnnxVoice", FailingManager)
+    with pytest.raises(public_error) as error:
+        Qwen3Runtime.from_installed("base-0.6b")
+    assert isinstance(error.value.__cause__, upstream_error)
+
+
+def test_inference_runtime_contract_maps_to_generation_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    adapter = _Adapter(tmp_path, model_type="voice_design")
+
+    def fail_infer(*args: Any, **kwargs: Any) -> InferenceResult:
+        raise RuntimeContractError("invalid model output")
+
+    monkeypatch.setattr(adapter, "infer", fail_infer)
+    runtime = Qwen3Runtime(adapter=adapter)
+    with pytest.raises(ModelGenerationError) as error:
+        runtime.design_voice(VoiceDesignRequest("design", "Hello.", "Warm voice"))
+    assert isinstance(error.value.__cause__, RuntimeContractError)
+
+
+def test_invalid_reference_inputs_use_public_errors(tmp_path: Path) -> None:
+    with pytest.raises(InvalidReferenceTranscriptError):
+        ReferenceVoice(tmp_path / "reference.wav", "  ")
+
+    runtime = Qwen3Runtime(adapter=_Adapter(tmp_path))
+    with pytest.raises(InvalidReferenceAudioError) as error:
+        runtime.prepare_voice(ReferenceVoice(tmp_path / "missing.wav", "spoken words"))
+    assert isinstance(error.value.__cause__, FileNotFoundError)
+
+
+def test_reference_tokenizer_failure_maps_to_transcript_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    reference_path = tmp_path / "reference.wav"
+    write_wav(reference_path, np.zeros(12_000, dtype=np.float32))
+    runtime = Qwen3Runtime(adapter=_Adapter(tmp_path))
+
+    def fail_encode(*args: Any, **kwargs: Any) -> tuple[int, ...]:
+        raise ValueError("unsupported transcript token")
+
+    monkeypatch.setattr(runtime_module, "encode_reference", fail_encode)
+    with pytest.raises(InvalidReferenceTranscriptError) as error:
+        runtime.prepare_voice(ReferenceVoice(reference_path, "spoken words"))
+    assert isinstance(error.value.__cause__, ValueError)
+
+
+def test_oversized_request_uses_public_input_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime = Qwen3Runtime(adapter=_Adapter(tmp_path, model_type="voice_design"))
+    monkeypatch.setattr(
+        runtime,
+        "measure_text",
+        lambda *args, **kwargs: RequestMeasure(amount=10, maximum=5, fits=False),
+    )
+    with pytest.raises(SynthesisInputTooLongError):
+        runtime.design_voice(VoiceDesignRequest("design", "Hello.", "Warm voice"))

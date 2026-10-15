@@ -32,7 +32,7 @@ def _add_gen(p: argparse.ArgumentParser) -> None:
 def _runtime(args: argparse.Namespace) -> Qwen3Runtime:
     if getattr(args, "bundle_dir", None):
         return Qwen3Runtime.load(args.bundle_dir, quality=args.quality, provider=args.provider)
-    return Qwen3Runtime.from_pretrained(
+    return Qwen3Runtime.from_installed(
         args.bundle,
         quality=args.quality,
         provider=args.provider,
