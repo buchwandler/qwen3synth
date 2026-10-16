@@ -1,0 +1,205 @@
+schema_version: 1
+object_type: commit_audit_sheet
+versioning:
+  schema_version: 1
+  revision: 3
+release_version: v0.1.0
+git_base_ref: "5650716"
+git_base_sha: 5650716b16201e86fed3f1f78c67914f74ed7456
+git_head_ref: HEAD
+git_head_sha: b5e4621ec9b9d5d221745202fc31cbb04de11127
+git_range: 5650716b16201e86fed3f1f78c67914f74ed7456..b5e4621ec9b9d5d221745202fc31cbb04de11127
+commit_count: 4
+rows:
+  - sha: 0df543b131575fcd0e4c7f666f7209a026b63de8
+    source_ref: git:0df543b131575fcd0e4c7f666f7209a026b63de8
+    short_sha: 0df543b
+    changed_paths:
+      - .codecrate.toml
+      - .github/workflows/tests.yml
+      - .gitignore
+      - .pre-commit-config.yaml
+      - NOTICE
+      - README.md
+      - docs/implementation-brief.md
+      - pyproject.toml
+      - qwen3synth/__init__.py
+      - qwen3synth/__main__.py
+      - qwen3synth/audio.py
+      - qwen3synth/backend.py
+      - qwen3synth/catalog.py
+      - qwen3synth/catalog_seed.json
+      - qwen3synth/errors.py
+      - qwen3synth/profile.py
+      - qwen3synth/py.typed
+      - qwen3synth/runtime.py
+      - qwen3synth/tokenizer.py
+      - qwen3synth/types.py
+      - tests/test_audio.py
+      - tests/test_catalog.py
+      - tests/test_profile.py
+      - tests/test_tokenizer.py
+    stats:
+      files_changed: 24
+      insertions: 2430
+      deletions: 1
+    inspected: true
+    inspected_paths:
+      - qwen3synth/runtime.py
+      - qwen3synth/audio.py
+      - qwen3synth/profile.py
+    observed_behavior:
+      Introduced Qwen3-TTS voice design and cloning workflows, including
+      reference-audio preparation, reusable saved voice profiles, token measurement,
+      and mono 24 kHz WAV output.
+    public_impact: public
+    decision: accepted
+    stale: false
+    evidence_subject: "feat: initial version"
+    target_entry_key: voice-workflows
+    target_entry_id: entry-0001
+    notes: ""
+  - sha: 4c2943a72df32b1276e017b94bee853db29716cb
+    source_ref: git:4c2943a72df32b1276e017b94bee853db29716cb
+    short_sha: 4c2943a
+    changed_paths:
+      - README.md
+      - docs/implementation-brief.md
+      - pyproject.toml
+      - qwen3synth/backend.py
+      - qwen3synth/catalog.py
+      - qwen3synth/catalog_seed.json
+      - qwen3synth/profile.py
+      - qwen3synth/runtime.py
+      - qwen3synth/tokenizer.py
+      - qwen3synth/types.py
+      - tests/test_audio.py
+      - tests/test_catalog.py
+      - tests/test_profile.py
+      - tests/test_runtime.py
+      - tests/test_tokenizer.py
+    stats:
+      files_changed: 15
+      insertions: 641
+      deletions: 816
+    inspected: true
+    inspected_paths:
+      - qwen3synth/runtime.py
+      - qwen3synth/catalog.py
+      - qwen3synth/backend.py
+    observed_behavior:
+      Replaced Qwen3Synth-owned model execution and bundle management
+      with ONNXVoice integration while retaining the Qwen3 frontend, tokenizer, audio
+      handling, and voice-profile workflows.
+    public_impact: public
+    decision: accepted
+    stale: false
+    evidence_subject: "feat: improved embedding into onnxvoice"
+    target_entry_key: onnxvoice-integration
+    target_entry_id: entry-0002
+    notes: ""
+  - sha: 67e106aae40c6056f304d0eb42fa5244541bada3
+    source_ref: git:67e106aae40c6056f304d0eb42fa5244541bada3
+    short_sha: 67e106a
+    changed_paths:
+      - .github/workflows/release.yml
+      - .github/workflows/tests.yml
+      - .ledger/ledger.toml
+      - .ledger/taskledger/.ledger-project.toml
+      - .ledger/taskledger/config.toml
+      - README.md
+      - docs/api-contract.md
+      - examples/01_voice_design_prompt_to_wav.py
+      - examples/README.md
+      - pyproject.toml
+      - qwen3synth/__init__.py
+      - qwen3synth/__main__.py
+      - qwen3synth/api_contract.py
+      - qwen3synth/audio.py
+      - qwen3synth/backend.py
+      - qwen3synth/catalog.py
+      - qwen3synth/catalog_seed.json
+      - qwen3synth/discovery.py
+      - qwen3synth/frontend.py
+      - qwen3synth/identity.py
+      - qwen3synth/profile.py
+      - qwen3synth/runtime.py
+      - qwen3synth/tokenizer.py
+      - qwen3synth/types.py
+      - tests/conftest.py
+      - tests/fixtures/qwen3_tokenizer_parity.json
+      - tests/test_cli.py
+      - tests/test_integration_wavekat.py
+      - tests/test_metadata_api.py
+      - tests/test_profile.py
+      - tests/test_prompt_templates.py
+      - tests/test_runtime.py
+      - tests/test_tokenizer_parity.py
+    stats:
+      files_changed: 33
+      insertions: 2064
+      deletions: 308
+    inspected: true
+    inspected_paths:
+      - qwen3synth/__init__.py
+      - qwen3synth/api_contract.py
+      - qwen3synth/discovery.py
+      - qwen3synth/runtime.py
+      - docs/api-contract.md
+    observed_behavior:
+      Published a versioned request API contract and metadata-only
+      bundle discovery, and documented the ONNXVoice-backed runtime and model-installation
+      boundary.
+    public_impact: public
+    decision: accepted
+    stale: false
+    evidence_subject: "feat: use onnxvoice and add examples and docs"
+    target_entry_key: onnxvoice-integration
+    target_entry_id: entry-0002
+    notes: ""
+  - sha: b5e4621ec9b9d5d221745202fc31cbb04de11127
+    source_ref: git:b5e4621ec9b9d5d221745202fc31cbb04de11127
+    short_sha: b5e4621
+    changed_paths:
+      - .github/workflows/release.yml
+      - MANIFEST.in
+      - README.md
+      - docs/api-contract.md
+      - docs/implementation-brief.md
+      - examples/00_discover_bundles.py
+      - examples/01_voice_design_prompt_to_wav.py
+      - examples/02_prepare_voice_profile.py
+      - examples/03_synthesize_cloned_voice.py
+      - examples/04_local_bundle.py
+      - examples/05_inspect_voice_profile.py
+      - examples/README.md
+      - pyproject.toml
+      - qwen3synth/__main__.py
+      - qwen3synth/catalog.py
+      - tests/test_api_only.py
+      - tests/test_cli.py
+      - tests/test_runtime.py
+    stats:
+      files_changed: 18
+      insertions: 527
+      deletions: 539
+    inspected: true
+    inspected_paths:
+      - qwen3synth/__main__.py
+      - qwen3synth/catalog.py
+      - README.md
+      - docs/api-contract.md
+      - examples/01_voice_design_prompt_to_wav.py
+      - examples/README.md
+      - tests/test_api_only.py
+    observed_behavior:
+      Removed the qwen3synth command-line interface and documented
+      API-only Python workflows with direct examples for discovery, voice design, profile
+      preparation and inspection, cloning, and local bundles.
+    public_impact: public
+    decision: accepted
+    stale: false
+    evidence_subject: "feat: remove cli and improve  examples"
+    target_entry_key: api-only-examples
+    target_entry_id: entry-0003
+    notes: ""
