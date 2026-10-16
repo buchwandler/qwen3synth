@@ -2,21 +2,33 @@
 
 Qwen3Synth owns the Qwen3 frontend, request policy, WAV handling, and reusable voice profiles. ONNXVoice owns the normalized bundle catalog, installation store, model validation, ONNX sessions, generation, and vocoding.
 
+## API-only package and migration
+
+The package is API-only. It installs no `qwen3synth` console command and provides no `qwen3synth.__main__` module, so `python -m qwen3synth` is not supported. The former `install_bundle()` and `find_installed()` catalog helpers are removed in v0.1.0. Use ONNXVoice for asset management and keep structured catalog inspection in `load_catalog()` and `bundle_record()`.
+
 ## Installation and model opening
 
-Model acquisition is explicit:
+Acquire model assets explicitly through ONNXVoice:
 
 ```bash
-qwen3synth models install voice-design-1.7b --quality int4
+onnxvoice install qwen3:voice-design-1.7b --quality int4
 ```
 
-CLI `voice design`, `voice prepare`, and `synthesize` commands only open installed assets. In Python:
+Voice design, profile preparation, and synthesis are Python methods. In Python:
 
 - `Qwen3Runtime.from_pretrained(...)` is an explicit convenience factory that may install the selected bundle.
 - `Qwen3Runtime.from_installed(...)` resolves and opens an existing managed installation with ONNXVoice offline mode. It does not acquire assets.
 - `Qwen3Runtime.load(path)` opens an explicit local bundle directory without registering or copying its files.
 
 The example at [`examples/01_voice_design_prompt_to_wav.py`](../examples/01_voice_design_prompt_to_wav.py) uses `from_installed()` and expects the model to have been installed first.
+
+## Cache and local bundles
+
+`Qwen3Runtime.from_pretrained()` is the explicit acquisition convenience and delegates installation to `OnnxVoice.install()`. `from_installed()` configures ONNXVoice offline mode and only resolves an existing installation. `load(path)` opens an unmanaged local bundle without catalog acquisition or a separate cache. A complete local bundle includes `config.json`, tokenizer files, required embeddings, all required ONNX graphs, and graph-adjacent `.onnx.data` files; an isolated graph is insufficient.
+
+Cache precedence is explicit `cache_dir=`, then `QWEN3SYNTH_CACHE`, then `ONNXVOICE_CACHE_DIR`, then the ONNXVoice default. Use `ONNXVOICE_CACHE_DIR` to share installed assets between `onnxvoice` and Qwen3Synth.
+
+Base reference WAVs must be 0.5 to 10 seconds and their transcript must match the speech exactly. `.qvoice` profiles contain sensitive voice information and should be stored privately and used only for authorized voices.
 
 ## Metadata APIs
 
@@ -59,4 +71,6 @@ Relevant ONNXVoice errors are translated at frontend entry points. Missing insta
 
 ## Verification status
 
-Offline unit tests cover tokenizer parity fixtures, shared prompt encoders, runtime request behavior, profile validation, public metadata APIs, and error mapping. The fixture tests use pinned tokenizer assets and exact integer IDs. Strict real-model integration completed with ONNX Runtime 1.31.0 (`CPUExecutionProvider`), using the pinned Base revision `177cd39e2ddab0d4d7ce5152a7abc2d382621158` and VoiceDesign revision `62c7863a68800d72bcee4f2931148c441571ace7` at `int4` and `fp32`. With `QWEN3SYNTH_REQUIRE_REAL=1` and `QWEN3SYNTH_TEST_CACHE` set to the installed cache, `pytest tests/test_integration_wavekat.py` completed with 4 passed in 1218.36s. This validates generated audio structure, Base profile prepare/save/load/clone, and offline repeat; it does not verify perceived audio quality. Manual listening remains unverified. A skipped integration test is not a pass.
+Offline unit tests cover tokenizer parity fixtures, shared prompt encoders, runtime request behavior, profile validation, public metadata APIs, and error mapping. The fixture-complete non-integration run completed with 81 passed, 4 integration tests deselected, and no skips, using pinned tokenizer assets and exact integer IDs.
+
+The current real-model integration run used the locally installed INT4 bundles at pinned revisions `177cd39e2ddab0d4d7ce5152a7abc2d382621158` (Base) and `62c7863a68800d72bcee4f2931148c441571ace7` (VoiceDesign), after both passed ONNXVoice checksum verification. With `QWEN3SYNTH_REQUIRE_REAL=1`, `pytest tests/test_integration_wavekat.py -k int4 -ra` completed with 2 passed and 2 FP32 cases deselected in 113.35s. It exercised VoiceDesign output structure and Base profile preparation, save/load, cloning, and offline repeat. The end-to-end examples also generated and inspected mono 24-kHz PCM WAVs; the VoiceDesign reference and cloned output were each 2.96 seconds. These runtime checks used the local ONNXVoice 0.2.9 checkout and preinstalled assets. They do not prove released ONNXVoice 0.2.9 resolves from the configured package index. No manual listening was performed; perceived audio quality and FP32 integration remain unverified.

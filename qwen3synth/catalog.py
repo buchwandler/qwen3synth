@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from onnxvoice import NotInstalledError, OnnxVoice
+from onnxvoice import OnnxVoice
 from onnxvoice.errors import CatalogError as OnnxCatalogError
 from onnxvoice.errors import OfflineError
 
-from .errors import CatalogError, ModelNotInstalledError
+from .errors import CatalogError
 
 
 @dataclass(frozen=True)
@@ -61,37 +61,3 @@ def bundle_record(bundle_id: str, catalog: dict[str, Any]) -> BundleRecord:
         profiles=bundle["profiles"],
         license=source.get("license", "unknown"),
     )
-
-
-def find_installed(
-    bundle_id: str,
-    quality: str = "int4",
-    *,
-    catalog_source: str | Path | None = None,
-    cache_dir: Path | None = None,
-) -> Path:
-    """Resolve an existing OnnxVoice installation without acquiring assets."""
-    catalog = load_catalog(catalog_source, cache_dir=cache_dir)
-    record = bundle_record(bundle_id, catalog)
-    manager = _manager(catalog_source, cache_dir)
-    try:
-        return manager.resolve(f"qwen3:{record.id}", quality=quality).path
-    except NotInstalledError as exc:
-        raise ModelNotInstalledError(f"bundle {record.id}:{quality} is not installed") from exc
-
-
-def install_bundle(
-    bundle_id: str,
-    quality: str = "int4",
-    *,
-    catalog_source: str | Path | None = None,
-    cache_dir: Path | None = None,
-    force: bool = False,
-) -> Path:
-    """Install a Qwen3 bundle using OnnxVoice's shared catalog and asset store."""
-    catalog = load_catalog(catalog_source, cache_dir=cache_dir)
-    record = bundle_record(bundle_id, catalog)
-    installation = _manager(catalog_source, cache_dir).install(
-        f"qwen3:{record.id}", quality=quality, force=force
-    )
-    return installation.path

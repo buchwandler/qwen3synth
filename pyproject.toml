@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 authors = [{name = "qwen3synth contributors"}]
-dependencies = ["numpy>=1.23", "onnxvoice>=0.2.8,<0.3"]
+dependencies = ["numpy>=1.23", "onnxvoice>=0.2.9,<0.3"]
 keywords = ["qwen3-tts", "tts", "onnx", "onnxruntime", "voice-cloning", "speech"]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -26,8 +26,8 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-cpu = ["onnxvoice[cpu]>=0.2.8,<0.3"]
-gpu = ["onnxvoice[gpu]>=0.2.8,<0.3"]
+cpu = ["onnxvoice[cpu]>=0.2.9,<0.3"]
+gpu = ["onnxvoice[gpu]>=0.2.9,<0.3"]
 dev = [
   "pytest>=8",
   "pytest-cov>=5",
@@ -37,8 +37,6 @@ dev = [
   "twine>=5",
 ]
 
-[project.scripts]
-qwen3synth = "qwen3synth.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

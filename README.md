@@ -1,133 +1,80 @@
 # qwen3synth
 
-`qwen3synth` is a Qwen3-TTS frontend for the WaveKat ONNX bundles. It keeps the user-facing text and voice workflow while delegating catalogs, model installation, integrity verification, ONNX sessions, graph validation, providers, generation, and vocoding to [OnnxVoice](https://github.com/buchwandler/onnxvoice).
+`qwen3synth` is an API-only Python frontend for Qwen3-TTS voice design and cloning on WaveKat ONNX bundles. It owns tokenization, prompt templates, language normalization, WAV handling and resampling, reference conditioning, `.qvoice` profiles, and synthesis requests. [ONNXVoice](https://github.com/buchwandler/onnxvoice) owns catalog and model installation, integrity checks, ONNX sessions, generation, and vocoding.
 
-The supported bundles are `voice-design-1.7b` and `base-0.6b`, with `fp32` and `int4` profiles and the `qwen3-wavekat-v1` ABI. VoiceDesign creates a voice from a description; Base clones from a reference recording and its exact transcript. Both return mono 24-kHz WAV when saved by this frontend.
+The supported bundles are `voice-design-1.7b` and `base-0.6b`, with `fp32` and `int4` profiles and the `qwen3-wavekat-v1` layout. Saved synthesis output is mono 24-kHz WAV. Use only model assets under their licenses and clone voices you are authorized to use.
 
-## Ownership and dependencies
+## Install provider support and model assets
 
-Qwen3Synth owns Qwen byte-level BPE tokenization, chat templates, language normalization, WAV read/write and resampling, request/generation policy, reference-profile persistence, and CLI behavior. OnnxVoice owns the catalog and model-runtime lifecycle. Qwen3Synth does not maintain a separate model downloader/cache or ONNX Runtime wrapper.
-
-Install a provider extra through this package:
+From a source checkout, install the provider extra supported by your platform:
 
 ```bash
 python -m pip install -e '.[cpu]'
-# or, on a compatible ONNX Runtime platform:
+# Or use the GPU extra on a supported ONNX Runtime platform:
 python -m pip install -e '.[gpu]'
 ```
 
-The package does not depend on `qwen-tts`, PyTorch, Transformers, `huggingface_hub`, librosa, or soundfile. OnnxVoice manages pinned asset acquisition through its own catalog/store. The assets retain their upstream licenses; install and use them only under those terms, and clone only voices you have permission to use.
-
-## Explicit model installation
-
-Only `qwen3synth models install` and Python `Qwen3Runtime.from_pretrained()` acquire model assets. CLI design, prepare, and synthesis commands only open installed models. For offline or production use, prefer `Qwen3Runtime.from_installed()`.
+Catalog listing reads model metadata and does not initialize ONNX sessions. A catalog refresh may access the network if metadata is not cached. Installing a bundle downloads and verifies its model assets, which can require several gigabytes:
 
 ```bash
-qwen3synth models list
-qwen3synth models install voice-design-1.7b --quality int4
-qwen3synth models install base-0.6b --quality int4
+onnxvoice list --system qwen3
+onnxvoice install qwen3:voice-design-1.7b --quality int4
+onnxvoice install qwen3:base-0.6b --quality int4
 ```
 
-The shared OnnxVoice catalog supports the canonical refs `qwen3:voice-design-1.7b` and `qwen3:base-0.6b`; the short names above are aliases. `--cache-dir` selects the OnnxVoice cache for supported CLI commands. `QWEN3SYNTH_CACHE` sets the frontend's cache directory. See the [OnnxVoice Qwen3 runtime contract](https://github.com/buchwandler/onnxvoice/blob/main/docs/systems/qwen3.md) for provider, local-bundle, ABI, and parity details.
+`Qwen3Runtime.from_installed()` and the examples below open already installed assets without downloading models. `Qwen3Runtime.from_pretrained()` is the explicit Python convenience that delegates installation to `OnnxVoice.install()`. For applications that need a fixed location, pass `cache_dir=`.
 
-## Design a voice
+ONNXVoice and Qwen3Synth share the ONNXVoice cache. Prefer `ONNXVOICE_CACHE_DIR` when setting one cache for installation and examples. Cache selection precedence is explicit `cache_dir=`, then the frontend override `QWEN3SYNTH_CACHE`, then `ONNXVOICE_CACHE_DIR`, then the ONNXVoice default.
+
+## Design, prepare, and synthesize
+
+The examples are Python scripts, not installed commands. This complete path designs a short reference, prepares its reusable profile using the exact spoken transcript, and synthesizes different words:
 
 ```bash
-qwen3synth voice design \
-  --bundle voice-design-1.7b --quality int4 \
+python examples/01_voice_design_prompt_to_wav.py \
   --prompt 'Warm, measured, clear British baritone.' \
   --text 'This sample demonstrates the voice.' \
-  --language en --seed 42 --output reference.wav
-```
+  --language en --quality int4 --provider cpu --seed 42 \
+  --max-new-tokens 128 --output reference.wav
 
-VoiceDesign duration is model-controlled, not an exact requested length. Save a suitable generated WAV and retain its exact spoken transcript if you plan to use Base cloning.
-
-## Prepare a Base voice profile
-
-The frontend reads WAV, converts it to mono 24-kHz samples, and enforces its reference duration policy. Choose a clean 0.5-to-10-second excerpt and provide the matching transcript; Qwen3Synth will not silently truncate a longer recording while keeping the wrong transcript.
-
-```bash
-qwen3synth voice prepare \
-  --bundle base-0.6b --quality int4 \
+python examples/02_prepare_voice_profile.py \
   --reference reference.wav \
   --transcript 'This sample demonstrates the voice.' \
-  --language en --output narrator.qvoice
-```
+  --language en --quality int4 --provider cpu --output narrator.qvoice
 
-The `.qvoice` profile uses strict schema 2: JSON metadata, numeric conditioning arrays, reference sample count, exact transcript token IDs, and checksums. It includes a profile content digest for identity. Loading enforces archive/member size limits, array shape/type checks, checksums, and `qwen3-wavekat-v1` layout. Synthesis rejects model ID or recorded model revision mismatches.
-
-## Synthesize with the prepared profile
-
-```bash
-qwen3synth synthesize \
-  --bundle base-0.6b --quality int4 \
+python examples/03_synthesize_cloned_voice.py \
   --voice narrator.qvoice \
-  --text 'Now the same voice can read new text.' \
-  --language en --seed 42 --output cloned.wav
+  --text 'Now the voice speaks different words.' \
+  --language en --quality int4 --provider cpu --seed 42 \
+  --max-new-tokens 128 --output cloned.wav
+
+python examples/05_inspect_voice_profile.py narrator.qvoice
 ```
 
-For a previously installed local directory, use `--bundle-dir PATH` instead of `--bundle`. The local directory must contain the complete selected WaveKat inventory, including graph-adjacent `.onnx.data` files. Local opening is unmanaged and does not copy or register those paths.
+Base reference audio must be a WAV from 0.5 to 10 seconds, and the transcript must match the recording exactly. The profile contains sensitive voice information. Keep it private. VoiceDesign duration is model-controlled; `max-new-tokens` is a generation cap, not an exact audio duration.
 
-## Python API
+See [`examples/README.md`](examples/README.md) for discovery, local-bundle use, and troubleshooting. A local bundle opened with `Qwen3Runtime.load()` must be complete, including configuration, tokenizer files, embeddings, every required graph, and adjacent `.onnx.data` files. A lone ONNX graph is not a complete bundle.
 
-`Qwen3Runtime.from_pretrained()` is an explicit convenience factory that may install the requested bundle into the OnnxVoice cache. `Qwen3Runtime.from_installed()` resolves and opens an existing installation without acquisition. `Qwen3Runtime.load()` opens an explicit local bundle directory without catalog access.
+## Python API and package boundary
+
+There is no `qwen3synth` console command, `qwen3synth.__main__`, or supported `python -m qwen3synth` invocation. Use `onnxvoice` for catalog and asset operations, the Python API for synthesis, and the examples for runnable workflows. The former `install_bundle()` and `find_installed()` catalog helpers are removed in v0.1.0. Use `onnxvoice install` for acquisition and `load_catalog()` / `bundle_record()` for structured catalog metadata.
 
 ```python
-from qwen3synth import (
-    GenerationConfig,
-    Qwen3Runtime,
-    ReferenceVoice,
-    SynthesisRequest,
-    VoiceDesignRequest,
-)
+from qwen3synth import GenerationConfig, Qwen3Runtime, VoiceDesignRequest
 
-with Qwen3Runtime.from_pretrained(
+with Qwen3Runtime.from_installed(
     "voice-design-1.7b", quality="int4", provider="cpu"
-) as designer:
-    sample = designer.design_voice(
+) as runtime:
+    result = runtime.design_voice(
         VoiceDesignRequest(
-            id="design-1",
-            text="A short sample to select a voice.",
-            description="Warm, measured, clear British baritone.",
+            id="example",
+            text="A short spoken sentence.",
+            description="Warm, clear baritone.",
             language="en",
         ),
-        config=GenerationConfig(seed=42),
+        config=GenerationConfig(seed=42, max_new_tokens=128),
     )
-    sample.save_wav("reference.wav")
-
-with Qwen3Runtime.from_pretrained(
-    "base-0.6b", quality="int4", provider="cpu"
-) as clone:
-    voice = clone.prepare_voice(
-        ReferenceVoice(
-            audio="reference.wav",
-            transcript="A short sample to select a voice.",
-            language="en",
-        )
-    )
-    voice.save("narrator.qvoice")
-    result = clone.synthesize(
-        SynthesisRequest(id="line-1", text="Read this in the selected voice.", language="en"),
-        voice=voice,
-        config=GenerationConfig(seed=42),
-    )
-    result.save_wav("cloned.wav")
+    result.save_wav("reference.wav")
 ```
 
-`GenerationConfig` exposes temperature, top-k, repetition penalty, maximum new codec frames, and seed. `Qwen3Runtime.measure_request()` and `measure_text()` report token capacity using the same frontend tokenizer as synthesis.
-
-## Metadata and stable API
-
-The package root exports `REQUEST_API_VERSION == 1`, `RequestApiContract`, and `request_api_contract()` for request capability negotiation. `runtime_identity()` returns deterministic frontend/ONNXVoice version and layout metadata without opening models.
-
-`discover_bundles()` delegates normalized catalog parsing to ONNXVoice and reports both Qwen3 bundles, their `base` or `voice_design` model type, `fp32`/`int4` profiles, pinned source revision, and 24-kHz sample rate. Use `offline=True` to prohibit network access. `inspect_voice_profile(path)` returns schema and model metadata plus the SHA-256 digest of the complete `.qvoice` file.
-
-The public error boundary includes `ModelNotInstalledError`, `UnsupportedModelCapabilityError`, `InvalidReferenceAudioError`, `InvalidReferenceTranscriptError`, `IncompatibleVoiceProfileError`, `InvalidModelLayoutError`, and `ModelGenerationError`. See [the API contract](docs/api-contract.md) for behavior and error mapping details.
-
-A short installed-model example is available in [`examples/README.md`](examples/README.md).
-
-## Runtime and parity status
-
-Qwen3Synth's regular unit tests are designed to run offline and cover exact tokenizer parity, prompt templates, WAV handling, runtime behavior, profile validation, metadata APIs, and stable error mapping. Strict real-model integration completed on CPU with ONNX Runtime 1.31.0 (`CPUExecutionProvider`) and the pinned Base (`177cd39e2ddab0d4d7ce5152a7abc2d382621158`) and VoiceDesign (`62c7863a68800d72bcee4f2931148c441571ace7`) bundles at both `int4` and `fp32`: `QWEN3SYNTH_REQUIRE_REAL=1 pytest tests/test_integration_wavekat.py` completed with 4 passed in 1218.36s using an installed cache selected by `QWEN3SYNTH_TEST_CACHE`. This verified generated audio structure, Base profile prepare/save/load/clone, and offline repeat. It does not establish perceived audio quality. Manual listening remains unverified, and a skipped model test is not a pass.
-
-ONNX Runtime provider support is platform-dependent. The presence of a `cpu` or `gpu` extra does not establish that a provider wheel is available or supported on a given mobile/Termux environment. Check the [OnnxVoice provider guide](https://github.com/buchwandler/onnxvoice/blob/main/docs/providers.md) and model asset requirements before installing multi-gigabyte profiles.
+Qwen3Synth does not add PyTorch, Transformers, `qwen-tts`, `huggingface_hub`, librosa, or soundfile as runtime dependencies. See [`docs/api-contract.md`](docs/api-contract.md) for stable APIs, metadata behavior, and error handling.

@@ -37,7 +37,7 @@ from qwen3synth.types import (
 
 def test_onnxvoice_minimum_qwen_runtime_release() -> None:
     major, minor, patch = map(int, onnxvoice.__version__.split(".")[:3])
-    assert (major, minor, patch) >= (0, 2, 8)
+    assert (major, minor, patch) >= (0, 2, 9)
     assert callable(OnnxVoice.install)
     assert callable(OnnxVoice.resolve)
     assert callable(OnnxVoice.open)

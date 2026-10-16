@@ -80,8 +80,21 @@ jobs:
           print(qwen3synth.request_api_contract())
           print(qwen3synth.runtime_identity())
           PY
-          "$venv/bin/python" -m qwen3synth --help
-          "$venv/bin/qwen3synth" --help
+          test ! -e "$venv/bin/qwen3synth"
+          export PATH="$venv/bin"
+          "$venv/bin/onnxvoice" --help
+          "$venv/bin/python" - <<'PY'
+          import importlib.metadata
+          import importlib.util
+          import shutil
+
+          scripts = {entry.name for entry in importlib.metadata.entry_points(group="console_scripts")}
+          assert "qwen3synth" not in scripts
+          assert "onnxvoice" in scripts
+          assert shutil.which("qwen3synth") is None
+          assert shutil.which("onnxvoice") is not None
+          assert importlib.util.find_spec("qwen3synth.__main__") is None
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: python-package-distributions

@@ -1,0 +1,8 @@
+include LICENSE
+include NOTICE
+include README.md
+recursive-include docs *.md
+recursive-include examples *.py *.md
+recursive-include tests *.py
+recursive-include tests/fixtures *.json
+prune .ledger
